@@ -1,6 +1,6 @@
 {
   "name": "react-mathjax-beautiful",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A React 18 MathJax formula editor component",
   "type": "module",
   "files": [
