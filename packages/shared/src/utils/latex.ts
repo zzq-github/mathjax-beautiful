@@ -2711,6 +2711,44 @@ export async function initMathJax(config?: MathJaxConfig): Promise<void> {
  */
 const MATHJAX_LOCAL_URLS = ['/mathjax/tex-svg.js', '/mathjax/es5/tex-svg.js'];
 
+function getBundledAppBaseUrl(): string | null {
+  if (typeof document === 'undefined') return null;
+
+  const scripts = Array.from(document.querySelectorAll<HTMLScriptElement>('script[src]'));
+  const entryScript = scripts.find((script) => {
+    try {
+      return new URL(script.src, window.location.href).pathname.includes('/assets/');
+    } catch {
+      return false;
+    }
+  });
+
+  if (!entryScript) return null;
+
+  const entryUrl = new URL(entryScript.src, window.location.href);
+  const assetsIndex = entryUrl.pathname.lastIndexOf('/assets/');
+  if (assetsIndex < 0) return null;
+
+  entryUrl.pathname = entryUrl.pathname.slice(0, assetsIndex + 1);
+  entryUrl.search = '';
+  entryUrl.hash = '';
+
+  return entryUrl.href;
+}
+
+function getLocalMathJaxUrls(): string[] {
+  const urls: string[] = [];
+  const appBaseUrl = getBundledAppBaseUrl();
+
+  if (appBaseUrl) {
+    urls.push(new URL('mathjax/es5/tex-svg.js', appBaseUrl).href);
+  }
+
+  urls.push('mathjax/es5/tex-svg.js', ...MATHJAX_LOCAL_URLS);
+
+  return [...new Set(urls)];
+}
+
 /**
  * 可用的MathJax CDN列表
  */
@@ -2757,8 +2795,31 @@ function loadMathJaxFromUrl(url: string): Promise<void> {
   });
 }
 
+function isMathJaxScript(script: HTMLScriptElement): boolean {
+  if (script.getAttribute(MATHJAX_SCRIPT_ATTR) === 'true') return true;
+
+  const src = script.getAttribute('src');
+  if (!src) return false;
+
+  try {
+    const url = new URL(src, window.location.href);
+    const href = url.href.toLowerCase();
+    const pathname = url.pathname.toLowerCase();
+
+    return (
+      pathname.includes('/mathjax/es5/') ||
+      pathname.endsWith('/mathjax/tex-svg.js') ||
+      href.includes('cdn.jsdelivr.net/npm/mathjax@') ||
+      href.includes('unpkg.com/mathjax@') ||
+      href.includes('cdnjs.cloudflare.com/ajax/libs/mathjax/')
+    );
+  } catch {
+    return src.includes('/mathjax/es5/') || src.endsWith('/mathjax/tex-svg.js');
+  }
+}
+
 function hasExistingMathJaxScript(): boolean {
-  return !!document.querySelector(`script[${MATHJAX_SCRIPT_ATTR}="true"], script[src*="mathjax"]`);
+  return Array.from(document.querySelectorAll<HTMLScriptElement>('script[src]')).some(isMathJaxScript);
 }
 
 function removeOwnedMathJaxScript(): void {
@@ -2772,7 +2833,7 @@ function removeOwnedMathJaxScript(): void {
  * @param urls - MathJax脚本URL数组
  * @returns Promise
  */
-export async function loadMathJax(urls: string | string[] = MATHJAX_LOCAL_URLS): Promise<void> {
+export async function loadMathJax(urls: string | string[] = getLocalMathJaxUrls()): Promise<void> {
   if (typeof window === 'undefined') {
     throw new Error('MathJax can only be loaded in browser environment');
   }
@@ -2793,7 +2854,7 @@ export async function loadMathJax(urls: string | string[] = MATHJAX_LOCAL_URLS):
   const urlList = Array.isArray(urls) ? urls : [urls];
 
   // 添加默认的备用CDN
-  const allUrls = [...urlList, ...MATHJAX_LOCAL_URLS, ...MATHJAX_CDNS];
+  const allUrls = [...urlList, ...getLocalMathJaxUrls(), ...MATHJAX_CDNS];
 
   // 去重
   const uniqueUrls = [...new Set(allUrls)];

@@ -27,6 +27,13 @@ describe('MathJax loader', () => {
   });
 
   it('merges caller config with defaults before loading MathJax', async () => {
+    const entryScript = document.createElement('script');
+    entryScript.setAttribute(
+      'src',
+      'https://zzq-github.github.io/mathjax-beautiful/assets/index.js'
+    );
+    document.head.appendChild(entryScript);
+
     const appendChildSpy = vi
       .spyOn(document.head, 'appendChild')
       .mockImplementation((node: Node) => {
@@ -54,5 +61,8 @@ describe('MathJax loader', () => {
     expect(window.MathJax?.tex?.inlineMath).toEqual([['\\(', '\\)']]);
     expect(window.MathJax?.svg?.fontCache).toBe('global');
     expect(appendChildSpy).toHaveBeenCalled();
+    expect((appendChildSpy.mock.calls[0][0] as HTMLScriptElement).src).toBe(
+      'https://zzq-github.github.io/mathjax-beautiful/mathjax/es5/tex-svg.js'
+    );
   });
 });
