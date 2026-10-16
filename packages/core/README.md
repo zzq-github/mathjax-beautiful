@@ -126,6 +126,9 @@ import 'vue-mathjax-beautiful/style.css'
 | `placeholder` | `string` | `""` | 输入框占位文案 |
 | `max-length` | `number` | `1000` | 最大输入长度 |
 | `rows` | `number` | `2` | 输入框行数 |
+| `symbol-width` | `number \| string` | 自适应均分 | 符号按钮固定宽度，数字按 px 处理，字符串支持 px/rem/em，如 `:symbol-width="40"` 或 `symbol-width="2.5rem"` |
+| `symbol-height` | `number \| string` | `48` | 符号按钮固定高度，数字按 px 处理，字符串支持 px/rem/em |
+| `symbol-gap` | `number \| string` | `8` | 符号按钮之间的间距，数字按 px 处理，字符串支持 px/rem/em，允许为 0 |
 | `enabled-categories` | `string[]` | `['basic', 'greek', 'advanced']` | 启用的符号分类 |
 | `default-category` | `string` | `'basic'` | 默认符号分类 |
 | `insert-button-text` | `string` | `'插入公式'` | 插入按钮文案 |

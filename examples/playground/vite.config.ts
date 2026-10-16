@@ -10,12 +10,27 @@ export default defineConfig({
   plugins: [vue(), react()],
 
   resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-      '@vue-mathjax-editor/core': resolve(__dirname, '../../packages/core/src'),
-      '@vue-mathjax-beautiful/shared': resolve(__dirname, '../../packages/shared/src'),
-      'react-mathjax-beautiful': resolve(__dirname, '../../packages/react/src'),
-    },
+    // 使用数组形式，保证更具体的规则先匹配（样式入口必须排在包名规则之前）
+    alias: [
+      {
+        find: 'vue-mathjax-beautiful/dist/style.css',
+        replacement: resolve(__dirname, '../../packages/core/src/styles/index.scss'),
+      },
+      {
+        find: '@vue-mathjax-beautiful/shared',
+        replacement: resolve(__dirname, '../../packages/shared/src'),
+      },
+      {
+        find: 'react-mathjax-beautiful',
+        replacement: resolve(__dirname, '../../packages/react/src'),
+      },
+      // 开发模式直接指向包源码，避免依赖未构建的 dist 产物并支持 HMR
+      {
+        find: 'vue-mathjax-beautiful',
+        replacement: resolve(__dirname, '../../packages/core/src/index.ts'),
+      },
+      { find: '@', replacement: resolve(__dirname, 'src') },
+    ],
   },
 
   css: {

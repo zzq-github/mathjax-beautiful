@@ -57,6 +57,9 @@
             :inline-mode="true"
             :theme="isDark ? 'dark' : 'light'"
             :theme-config="config?.themeConfig"
+            :symbol-width="40"
+            :symbol-height="40"
+            :symbol-gap="5"
             @insert="$emit('formulaInsert', $event)"
           />
           <div class="mt-6 p-4 bg-blue-50/80 dark:bg-blue-900/40 backdrop-blur-sm border border-blue-200/50 dark:border-blue-800/50 rounded-xl transition-colors duration-300">

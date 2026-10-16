@@ -9,7 +9,15 @@ export interface VirtualListOptions {
 export interface VirtualGridOptions extends VirtualListOptions {
   columnCount: number;
   gap?: number;
+  /**
+   * 固定单元格宽度（px）。
+   * 传入后按像素定位与定宽渲染，不传则按容器宽度百分比均分。
+   */
+  itemWidth?: number;
 }
+
+/** 支持传入配置对象或返回配置的函数，后者可跟随外部状态（如 props）实时变化 */
+export type VirtualGridOptionsSource = VirtualGridOptions | (() => VirtualGridOptions);
 
 export interface VirtualListItem<T> {
   data: T;
@@ -102,31 +110,41 @@ export function useVirtualList<T>(
  */
 export function useVirtualGrid<T>(
   list: Ref<T[]>,
-  options: VirtualGridOptions
+  optionsSource: VirtualGridOptionsSource
 ) {
-  const { itemHeight, columnCount, gap = 8, overscan = 2, containerHeight = 300 } = options;
-  
   const containerRef = ref<HTMLElement | null>(null);
   const scrollTop = ref(0);
   const containerWidth = ref(0);
+
+  // 配置支持函数形式，从而跟随外部 props 变化实时重算布局
+  const options = computed<VirtualGridOptions>(() =>
+    typeof optionsSource === 'function' ? optionsSource() : optionsSource
+  );
+
+  const itemHeight = computed(() => options.value.itemHeight);
+  const columnCount = computed(() => Math.max(1, Math.floor(options.value.columnCount) || 1));
+  const gap = computed(() => options.value.gap ?? 8);
+  const fixedItemWidth = computed(() => options.value.itemWidth);
+  const overscan = computed(() => options.value.overscan ?? 2);
+  const containerHeight = computed(() => options.value.containerHeight ?? 300);
   
   // 计算行数
-  const rowCount = computed(() => Math.ceil(list.value.length / columnCount));
+  const rowCount = computed(() => Math.ceil(list.value.length / columnCount.value));
   
   // 计算可见范围
   const visibleRange = computed(() => {
-    const rowHeight = itemHeight + gap;
+    const rowHeight = itemHeight.value + gap.value;
     const totalHeight = rowCount.value * rowHeight;
     const startRow = Math.floor(scrollTop.value / rowHeight);
-    const visibleRowCount = Math.ceil(containerHeight / rowHeight);
+    const visibleRowCount = Math.ceil(containerHeight.value / rowHeight);
     
     // 添加 overscan 缓冲
-    const startRowIndex = Math.max(0, startRow - overscan);
-    const endRowIndex = Math.min(rowCount.value, startRow + visibleRowCount + overscan);
+    const startRowIndex = Math.max(0, startRow - overscan.value);
+    const endRowIndex = Math.min(rowCount.value, startRow + visibleRowCount + overscan.value);
     
     // 计算可见的 item 索引范围
-    const startIndex = startRowIndex * columnCount;
-    const endIndex = Math.min(list.value.length, endRowIndex * columnCount);
+    const startIndex = startRowIndex * columnCount.value;
+    const endIndex = Math.min(list.value.length, endRowIndex * columnCount.value);
     
     return {
       start: startIndex,
@@ -141,31 +159,47 @@ export function useVirtualGrid<T>(
   // 可见列表项（包含行列位置信息）
   const visibleItems = computed<VirtualGridItem<T>[]>(() => {
     const { start, end } = visibleRange.value;
+    const cols = columnCount.value;
     return list.value.slice(start, end).map((data, index) => {
       const actualIndex = start + index;
       return {
         data,
         index: actualIndex,
-        row: Math.floor(actualIndex / columnCount),
-        col: actualIndex % columnCount,
+        row: Math.floor(actualIndex / cols),
+        col: actualIndex % cols,
       };
     });
   });
   
   // 计算每个 item 的位置样式
   const getItemStyle = (item: VirtualGridItem<T>) => {
-    const rowHeight = itemHeight + gap;
-    // 每个格子的宽度百分比
-    const cellWidthPercent = 100 / columnCount;
+    const height = itemHeight.value;
+    const spacing = gap.value;
+    const width = fixedItemWidth.value;
+    const rowHeight = height + spacing;
+
+    // 指定了固定宽度：按像素定位，保证按钮尺寸与外部组件一致
+    if (width && width > 0) {
+      return {
+        position: 'absolute' as const,
+        top: `${item.row * rowHeight}px`,
+        left: `${item.col * (width + spacing)}px`,
+        width: `${width}px`,
+        height: `${height}px`,
+      };
+    }
+
+    // 未指定宽度：沿用按容器宽度百分比均分的自适应布局
+    const cellWidthPercent = 100 / columnCount.value;
     // 实际内容宽度（减去间隙）
-    const itemWidthCalc = `calc(${cellWidthPercent}% - ${gap}px)`;
+    const itemWidthCalc = `calc(${cellWidthPercent}% - ${spacing}px)`;
     
     return {
       position: 'absolute' as const,
       top: `${item.row * rowHeight}px`,
-      left: `calc(${item.col * cellWidthPercent}% + ${gap / 2}px)`,
+      left: `calc(${item.col * cellWidthPercent}% + ${spacing / 2}px)`,
       width: itemWidthCalc,
-      height: `${itemHeight}px`,
+      height: `${height}px`,
     };
   };
   
@@ -181,7 +215,8 @@ export function useVirtualGrid<T>(
     });
   };
   
-  // 更新容器宽度
+  // 更新容器可用宽度
+  // 绝对定位子元素以 padding box 为参照，clientWidth 正好等于该宽度
   const updateContainerWidth = () => {
     if (containerRef.value) {
       containerWidth.value = containerRef.value.clientWidth;
@@ -191,8 +226,8 @@ export function useVirtualGrid<T>(
   // 滚动到指定索引
   const scrollToIndex = (index: number) => {
     if (containerRef.value) {
-      const rowHeight = itemHeight + gap;
-      const row = Math.floor(index / columnCount);
+      const rowHeight = itemHeight.value + gap.value;
+      const row = Math.floor(index / columnCount.value);
       containerRef.value.scrollTop = row * rowHeight;
     }
   };
@@ -206,6 +241,9 @@ export function useVirtualGrid<T>(
   
   return {
     containerRef,
+    containerWidth,
+    scrollTop,
+    columnCount,
     visibleItems,
     visibleRange,
     getItemStyle,

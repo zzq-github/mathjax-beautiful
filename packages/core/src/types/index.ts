@@ -47,6 +47,16 @@ export interface VueMathjaxBeautifulProps {
   scale?: number;
   fontSize?: string;
 
+  /**
+   * 符号按钮固定宽度（数字按 px 处理，字符串支持 px/rem/em，如 "2.5rem"）。
+   * 不传时按容器宽度自适应均分。
+   */
+  symbolWidth?: number | string;
+  /** 符号按钮固定高度（数字按 px 处理，字符串支持 px/rem/em），不传时使用默认高度 */
+  symbolHeight?: number | string;
+  /** 符号按钮之间的间距（数字按 px 处理，字符串支持 px/rem/em），允许 0，默认 8px */
+  symbolGap?: number | string;
+
   readonly?: boolean;
   showSymbols?: boolean;
   showPreview?: boolean;
