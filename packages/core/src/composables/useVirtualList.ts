@@ -39,7 +39,7 @@ export function useVirtualList<T>(
 ) {
   const { itemHeight, overscan = 5, containerHeight = 300 } = options;
   
-  const containerRef = ref<HTMLElement | null>(null);
+  const containerRef: Ref<HTMLElement | null> = ref(null);
   const scrollTop = ref(0);
   
   // 计算可见范围
@@ -112,7 +112,7 @@ export function useVirtualGrid<T>(
   list: Ref<T[]>,
   optionsSource: VirtualGridOptionsSource
 ) {
-  const containerRef = ref<HTMLElement | null>(null);
+  const containerRef: Ref<HTMLElement | null> = ref(null);
   const scrollTop = ref(0);
   const containerWidth = ref(0);
 
@@ -270,7 +270,7 @@ export function useBatchRender<T>(
   
   const isRendering = ref(false);
   const progress = ref(0);
-  const abortController = ref<AbortController | null>(null);
+  const abortController: Ref<AbortController | null> = ref(null);
   
   // 渲染队列
   const renderQueue = async (visibleIndices?: Set<number>) => {

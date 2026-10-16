@@ -2,118 +2,103 @@ name: Publish to NPM
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v[0-9]*']
+  pull_request:
+    paths:
+      - '.github/workflows/publish.yml'
+      - 'scripts/**'
+      - 'packages/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to publish'
+      tag:
+        description: 'Existing release tag matching packages/core/package.json (e.g. v1.4.2)'
         required: true
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-vue-${{ github.event.pull_request.number || 'release' }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  verify:
     runs-on: ubuntu-latest
-    
+    outputs:
+      source-sha: ${{ steps.source.outputs.sha }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: '18'
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Check release tag and source
+        if: github.event_name != 'pull_request'
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          test "$GITHUB_REF" = "refs/tags/$RELEASE_TAG"
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; const {version} = JSON.parse(readFileSync("packages/core/package.json")); if (!/^\d+\.\d+\.\d+$/.test(version) || process.env.RELEASE_TAG !== `v${version}`) throw new Error("Tag must match the stable Vue package version");'
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor HEAD origin/master
+      - run: pnpm install --frozen-lockfile
+      - name: Run all regression tests
+        run: pnpm exec vitest run
+      - run: pnpm type-check
+      - run: pnpm build:all
+      - name: Pack and install in an isolated consumer
+        run: pnpm test:package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: dist/release/*
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.source-sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - name: Use npm with trusted publishing support
+        run: npm install --global npm@11.15.0
+      - uses: actions/download-artifact@v4
         with:
-          version: 8
-
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: |
-          echo "store_path=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ steps.pnpm-cache.outputs.store_path }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build package
-        run: |
-          cd packages/core
-          npm run build
-
-      - name: Run tests
-        run: |
-          cd packages/core
-          npm test || echo "No tests found"
-
-      - name: Check package content
-        run: |
-          cd packages/core
-          npm pack --dry-run
-
-      - name: Update version (manual trigger)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          cd packages/core
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          npm version ${{ github.event.inputs.version }}
-          git push origin HEAD:${{ github.ref_name }}
-          git push origin --tags
-
-      - name: Publish to NPM
-        run: |
-          cd packages/core
-          npm publish
+          name: npm-package
+          path: dist/release
+      - name: Publish the verified tarball
+        run: node scripts/publish-package.mjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
+      - name: Verify registry version, integrity and latest tag
+        run: node scripts/verify-registry.mjs
+      - name: Create GitHub release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          body: |
-            ## 🚀 新版本发布
-
-            ### 安装
-            ```bash
-            npm install vue-mathjax-beautiful@latest
-            ```
-
-            ### 变更内容
-            请查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解详细变更内容。
-
-            ### 相关链接
-            - [📦 NPM Package](https://www.npmjs.com/package/vue-mathjax-beautiful)
-            - [📖 Documentation](https://github.com/${{ github.repository }}#readme)
-            - [🐛 Issues](https://github.com/${{ github.repository }}/issues)
-          draft: false
-          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
-
-      - name: Notify success
-        if: success()
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "🎉 Package published successfully!"
-          echo "📦 Check it out: https://www.npmjs.com/package/vue-mathjax-beautiful" 
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" dist/release/*.tgz --verify-tag --title "vue-mathjax-beautiful $RELEASE_TAG" --generate-notes
+          fi

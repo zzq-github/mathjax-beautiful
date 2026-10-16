@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*", "../shared/src/**/*"],
+  "compilerOptions": {
+    "paths": {
+      "vue": ["./packages/core/node_modules/vue-declarations"],
+      "@vue-mathjax-beautiful/shared": ["./packages/shared/src"],
+      "@vue-mathjax-beautiful/shared/*": ["./packages/shared/src/*"]
+    }
+  }
+}

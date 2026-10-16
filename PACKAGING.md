@@ -1,452 +1,58 @@
-# Vue MathJax Beautiful - 打包发布指南
+# Vue 包发布
 
-本文档详细说明了如何构建、打包和发布 `vue-mathjax-beautiful` 到 npm 的完整流程。
+发布包为 `packages/core` 中的 `vue-mathjax-beautiful`。React 包独立管理版本，此工作流不发布 React 包。
 
-## 📋 发布前检查清单
+## 本地验证
 
-### 1. 环境准备
+使用 Node.js 22.23.2 和 pnpm 9.15.9，在仓库根目录运行：
 
-确保您的开发环境满足以下要求：
-
-- [x] Node.js >= 16.0.0
-- [x] npm >= 8.0.0 或 pnpm >= 7.0.0
-- [x] Git 已配置
-- [x] npm 账户已注册并登录
-
-### 2. 验证环境
-
-```bash
-# 检查Node.js版本
-node --version
-
-# 检查npm版本  
-npm --version
-
-# 检查npm登录状态
-npm whoami
-
-# 如果未登录，请先登录
-npm login
+```sh
+pnpm install --frozen-lockfile
+pnpm exec vitest run
+pnpm type-check
+pnpm build:all
+pnpm test:package
 ```
 
-## 🏗️ 项目结构说明
+也可在 Bash 中运行 `bash scripts/publish.sh`，执行相同检查。任何检查失败都会中止。
 
-```
-vue-mathjax-beautiful/
-├── packages/
-│   └── core/                 # 核心包目录
-│       ├── src/              # 源代码
-│       ├── dist/             # 构建产物（自动生成）
-│       ├── package.json      # 包配置文件
-│       ├── vite.config.ts    # 构建配置
-│       └── README.md         # 包文档
-├── examples/                 # 示例项目
-├── LICENSE                   # 许可证文件
-└── README.md                 # 项目文档
-```
+`test:package` 打包真实 tarball，在系统临时目录创建独立消费者并安装该 tarball，没有仓库源码别名或链接。它验证：
 
-## 🔧 构建流程
+- JS、UMD、CSS、类型声明和文档实际进入 npm 包，所有入口均能解析。
+- ESM 和 CommonJS 导入、组件、插件及工具 API 可用。
+- 新旧 CSS 子路径均可解析。
+- TypeScript Bundler 和 NodeNext 模式能编译消费者，且不跳过声明检查。
+- Vite 能构建导入组件和样式的消费者。
 
-### 1. 安装依赖
+消费者路径会打印到终端，供失败诊断使用。通过验证的 tarball 和含 SHA-512 integrity 的元数据保留在 `dist/release/`。
 
-```bash
-# 在项目根目录
-pnpm install
+类型声明构建使用仅供开发的 `vue-declarations` 别名，固定到 peer dependency 下限 Vue 3.3.0，避免生成依赖新版 Vue 类型参数的声明。该别名不会进入公开声明或运行时依赖；消费者验证覆盖 Vue 3.3.0 / TypeScript 5.3.3 和 Vue 3.5.17 / TypeScript 5.4.5。
 
-# 或者在核心包目录
-cd packages/core
-npm install
-```
+## 发布步骤
 
-### 2. 代码质量检查
+1. 更新 `packages/core/package.json` 的版本和 `packages/core/CHANGELOG.md`，验证后将变更合入 `master`。
+2. 在该提交上创建并推送一致的稳定版本 tag，例如：
 
-```bash
-# 在项目根目录运行
-npm run lint        # 代码格式检查
-npm run type-check  # 类型检查
+   ```sh
+   git tag -a v1.4.2 -m "Release vue-mathjax-beautiful 1.4.2"
+   git push origin v1.4.2
+   ```
+
+3. `.github/workflows/publish.yml` 重新执行验证，将验证后的 tarball 作为 artifact 传递给发布任务，直接发布该 tarball，不在发布任务重新构建。
+4. 工作流核对 npm 版本、`latest` 和 tarball integrity 后创建 GitHub Release。只有这些步骤成功才算发布完成。
+
+工作流要求 tag 精确匹配 Vue 包版本，且 tag 提交必须已在 `master` 中。发布串行执行，新版本必须高于当前稳定版 `latest`，防止旧版本覆盖最新版本。手动重跑时，工作流运行引用和输入都必须使用同一 tag，保证 provenance 对应实际构建的提交：
+
+```sh
+gh workflow run publish.yml --ref v1.4.2 -f tag=v1.4.2
 ```
 
-### 3. 构建包
+工作流不会自动修改版本或创建 tag。若该版本已存在，仅在 tarball integrity 相同时继续，禁止覆盖不同内容。
 
-```bash
-# 切换到核心包目录
-cd packages/core
+## npm 身份验证
 
-# 清理之前的构建产物
-rm -rf dist/
+优先在 npm 包设置中配置 Trusted Publisher：GitHub 用户 `zzq-github`，仓库 `mathjax-beautiful`，工作流文件 `publish.yml`，允许 `npm publish`，不指定 environment。工作流已配置 `id-token: write`，使用 Node 22 和 npm 11.15.0。
 
-# 执行构建
-npm run build
-```
+也兼容仓库 secret `NPM_TOKEN`。若 npm 尚未配置可信发布且没有有效 token，发布任务会失败，版本不会被宣称已发布。本地 npm 登录不影响 GitHub Actions 的身份验证。
 
-构建完成后会生成以下文件：
-
-- `dist/vue-mathjax-beautiful.js` - ES模块版本 (~90KB)
-- `dist/vue-mathjax-beautiful.umd` - UMD版本 (~71KB)
-- `dist/style.css` - 样式文件 (~47KB)
-- `dist/index.d.ts` - TypeScript类型定义 (~20KB)
-
-### 4. 验证构建产物
-
-```bash
-# 检查dist目录内容
-ls -la dist/
-
-# 验证包结构
-npm pack --dry-run
-```
-
-预期输出：
-```
-📦  vue-mathjax-beautiful@1.0.0
-=== Tarball Contents ===
-10.0kB README.md
-20.3kB dist/index.d.ts
-48.2kB dist/style.css
-92.0kB dist/vue-mathjax-beautiful.js
-72.4kB dist/vue-mathjax-beautiful.umd
-1.6kB  package.json
-```
-
-## 📦 版本管理
-
-### 1. 版本号规范
-
-遵循 [语义化版本控制](https://semver.org/lang/zh-CN/) 规范：
-
-- **MAJOR.MINOR.PATCH** (例如: 1.0.0)
-- **MAJOR**: 不兼容的API修改
-- **MINOR**: 向下兼容的功能性新增
-- **PATCH**: 向下兼容的问题修正
-
-### 2. 更新版本
-
-```bash
-# 在 packages/core 目录中
-
-# 补丁版本 (1.0.0 -> 1.0.1)
-npm version patch
-
-# 次要版本 (1.0.0 -> 1.1.0)  
-npm version minor
-
-# 主要版本 (1.0.0 -> 2.0.0)
-npm version major
-
-# 预发布版本 (1.0.0 -> 1.0.1-beta.0)
-npm version prerelease --preid=beta
-```
-
-### 3. 标签和提交
-
-版本更新会自动：
-- 更新 `package.json` 中的版本号
-- 创建一个 git 提交
-- 创建一个 git 标签
-
-## 🚀 发布流程
-
-### 1. 预发布检查
-
-```bash
-# 在 packages/core 目录中
-
-# 最终构建检查
-npm run build
-
-# 运行测试（如果有）
-npm test
-
-# 检查包内容
-npm pack --dry-run
-
-# 检查包大小
-npm pack
-ls -la *.tgz
-```
-
-### 2. 发布到 npm
-
-```bash
-# 正式发布
-npm publish
-
-# 如果是 scoped 包（@username/package-name）
-npm publish --access public
-
-# 发布测试版本
-npm publish --tag beta
-```
-
-### 3. 发布后验证
-
-```bash
-# 检查包是否发布成功
-npm view vue-mathjax-beautiful
-
-# 在新目录中测试安装
-mkdir test-install && cd test-install
-npm init -y
-npm install vue-mathjax-beautiful
-```
-
-## 🔍 质量保证
-
-### 1. 包大小优化
-
-监控包大小，确保合理：
-
-```bash
-# 分析包大小
-npm pack
-tar -tzf vue-mathjax-beautiful-*.tgz
-
-# 检查依赖大小
-npm ls --depth=0
-```
-
-当前包大小参考：
-- 压缩包: ~53KB
-- 解压后: ~245KB
-
-### 2. 依赖检查
-
-```bash
-# 检查依赖漏洞
-npm audit
-
-# 修复可修复的漏洞
-npm audit fix
-
-# 检查过时的依赖
-npm outdated
-```
-
-### 3. 兼容性测试
-
-确保包在不同环境中正常工作：
-
-```bash
-# 测试ES模块导入
-node -e "import('./dist/vue-mathjax-beautiful.js').then(console.log)"
-
-# 测试CommonJS导入
-node -e "console.log(require('./dist/vue-mathjax-beautiful.umd'))"
-```
-
-## 📚 文档更新
-
-### 1. 更新 README
-
-在发布前确保以下文档是最新的：
-
-- [ ] 安装说明
-- [ ] 使用示例
-- [ ] API 文档
-- [ ] 更新日志
-
-### 2. 生成更新日志
-
-```bash
-# 手动维护 CHANGELOG.md
-# 或使用工具生成
-npx conventional-changelog -p angular -i CHANGELOG.md -s
-```
-
-## ⚠️ 常见问题解决
-
-### 1. 构建失败
-
-```bash
-# 清理缓存和重新安装
-rm -rf node_modules package-lock.json
-npm install
-
-# 清理构建缓存
-rm -rf dist/
-npm run build
-```
-
-### 2. 类型定义问题
-
-如果 TypeScript 类型定义有问题：
-
-```bash
-# 检查 tsconfig.json 配置
-npx tsc --noEmit
-
-# 重新生成类型定义
-rm -rf dist/
-npm run build
-```
-
-### 3. 发布权限问题
-
-```bash
-# 确认登录状态
-npm whoami
-
-# 重新登录
-npm logout
-npm login
-
-# 检查包名是否已被占用
-npm view vue-mathjax-beautiful
-```
-
-### 4. 网络问题
-
-```bash
-# 使用淘宝镜像
-npm config set registry https://registry.npmmirror.com/
-
-# 发布时使用官方镜像
-npm publish --registry https://registry.npmjs.org/
-```
-
-## 🔄 自动化发布
-
-### 1. GitHub Actions 配置
-
-创建 `.github/workflows/publish.yml`：
-
-```yaml
-name: Publish to NPM
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          registry-url: 'https://registry.npmjs.org'
-      
-      - name: Install dependencies
-        run: pnpm install
-      
-      - name: Build package
-        run: |
-          cd packages/core
-          npm run build
-      
-      - name: Publish to NPM
-        run: |
-          cd packages/core
-          npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-```
-
-### 2. 发布脚本
-
-创建 `scripts/publish.sh`：
-
-```bash
-#!/bin/bash
-
-set -e
-
-echo "🚀 开始发布流程..."
-
-# 切换到核心包目录
-cd packages/core
-
-# 构建检查
-echo "📦 构建包..."
-npm run build
-
-# 运行测试
-echo "🧪 运行测试..."
-npm test
-
-# 检查包内容
-echo "🔍 检查包内容..."
-npm pack --dry-run
-
-# 发布确认
-read -p "确认发布到 npm? (y/N): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "📤 发布中..."
-    npm publish
-    echo "✅ 发布成功!"
-else
-    echo "❌ 发布已取消"
-    exit 1
-fi
-```
-
-## 📋 发布检查清单
-
-发布前请确保完成以下检查：
-
-### 代码质量
-- [ ] 所有代码已提交到 Git
-- [ ] 代码格式检查通过
-- [ ] TypeScript 类型检查无错误
-- [ ] 测试全部通过
-
-### 版本管理
-- [ ] 版本号已正确更新
-- [ ] CHANGELOG.md 已更新
-- [ ] Git 标签已创建
-
-### 构建产物
-- [ ] 构建无错误警告
-- [ ] 所有必要文件都包含在 dist/ 中
-- [ ] 包大小在合理范围内
-- [ ] 类型定义文件正确生成
-
-### 文档
-- [ ] README.md 内容最新
-- [ ] API 文档完整
-- [ ] 示例代码可运行
-- [ ] 样式导入说明已添加
-
-### 发布准备
-- [ ] npm 账户已登录
-- [ ] 包名可用或有权限
-- [ ] 网络连接正常
-
-## 🎯 发布后步骤
-
-### 1. 验证发布
-
-```bash
-# 检查 npm 上的包信息
-npm view vue-mathjax-beautiful
-
-# 测试安装
-npm install vue-mathjax-beautiful@latest
-```
-
-### 2. 更新文档
-
-- 更新官网示例
-- 通知社区更新
-- 更新相关博客文章
-
-### 3. 监控
-
-- 检查下载统计
-- 监控 GitHub Issues
-- 关注用户反馈
-
----
-
-## 📞 支持与反馈
-
-如果在打包发布过程中遇到问题：
-
-1. 检查本文档的常见问题部分
-2. 查看 [npm 官方文档](https://docs.npmjs.com/)
-3. 在项目 GitHub 仓库提交 Issue
-
-祝您发布顺利！🎉 
+参考：[npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)。

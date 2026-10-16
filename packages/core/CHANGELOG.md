@@ -1,5 +1,15 @@
 # vue-mathjax-beautiful
 
+## 1.4.2
+
+### Patch Changes
+
+- Fix local image insertion by preserving sanitized `blob:` image sources (#7).
+- Restore the editor caret when inserting images or formulas, cancelling the formula dialog, and editing existing formulas; keep formula SVGs noneditable and avoid duplicate LaTeX delimiters (#8).
+- Add configurable symbol width, height and gap, including CSS units, zero gaps and independent sizing per component (#9, #10).
+- Gate releases on regression tests, type checks and isolated tarball installation, runtime imports, declarations and consumer builds. Publish the exact verified artifact.
+- Fix bundled declarations so they include shared types, contain no implementation bodies or workspace imports, and remain compatible with the Vue 3.3 peer dependency floor.
+
 ## 1.4.0
 
 ### Minor Changes

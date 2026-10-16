@@ -17,6 +17,7 @@
     "type-check:api:react": "tsc --noEmit -p tsconfig.type-tests.react.json",
     "test": "vitest",
     "test:ui": "vitest --ui",
+    "test:package": "node scripts/verify-package.mjs",
     "lint": "eslint . --fix",
     "format": "prettier --write packages/*/src/**/*.{vue,ts,tsx,js,css} examples/*/src/**/*.{vue,ts,tsx,js,css}",
     "prepare": "husky install",

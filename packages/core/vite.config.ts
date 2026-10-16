@@ -2,19 +2,32 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import dts from 'vite-plugin-dts'
 import { resolve } from 'path'
+import { readFileSync, writeFileSync } from 'node:fs'
 
 export default defineConfig({
   plugins: [
     vue(),
     dts({
+      tsconfigPath: './tsconfig.build.json',
+      aliasesExclude: [/^vue$/],
+      afterDiagnostic(diagnostics) {
+        if (diagnostics.some(diagnostic => diagnostic.category === 1)) {
+          throw new Error('Declaration generation failed with TypeScript errors');
+        }
+      },
+      afterBuild() {
+        // Generate against the peer dependency floor, then expose the public Vue module name.
+        const typesPath = resolve(__dirname, 'dist/index.d.ts');
+        writeFileSync(typesPath, readFileSync(typesPath, 'utf8').replaceAll("'vue-declarations'", "'vue'"));
+      },
       insertTypesEntry: true,
       outDir: 'dist',
-      include: ['src/**/*'],
+      include: ['src/**/*', '../shared/src/**/*'],
       exclude: ['src/**/*.test.*', 'src/**/*.spec.*'],
-      entryRoot: 'src',
+      entryRoot: '..',
       rollupTypes: true,
       bundledPackages: ['@vue-mathjax-beautiful/shared'],
-      copyDtsFiles: false
+      copyDtsFiles: true
     })
   ],
   build: {
