@@ -22,6 +22,25 @@ describe('sanitizeHtml', () => {
     expect(html).toContain('viewBox="0 0 10 10"');
     expect(html).toContain('data-mml-node="math"');
   });
+
+  it('preserves blob image previews across repeated sanitization', () => {
+    const html = sanitizeHtml('<img src="blob:https://example.com/photo" onerror="alert(1)">');
+    expect(sanitizeHtml(html)).toContain('src="blob:https://example.com/photo"');
+    expect(html).not.toContain('onerror');
+  });
+
+  it('does not allow blob links or executable image sources', () => {
+    const html = sanitizeHtml(
+      '<a href="blob:https://example.com/script">link</a><img src="javascript:alert(1)">'
+    );
+    expect(html).not.toContain('href=');
+    expect(html).not.toContain('src=');
+  });
+
+  it('keeps generated formulas non-editable after sanitization', () => {
+    const html = sanitizeHtml('<svg data-latex="x^2" contenteditable="false"><path d="M0 0" /></svg>');
+    expect(sanitizeHtml(html)).toContain('contenteditable="false"');
+  });
 });
 
 describe('escapeHtml', () => {

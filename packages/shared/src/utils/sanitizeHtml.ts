@@ -46,10 +46,31 @@ const ADD_ATTR = [
   'y',
 ];
 
+let purifier: ReturnType<typeof DOMPurify> | undefined;
+
 export function sanitizeHtml(html: string): string {
   if (!html || typeof window === 'undefined') return html || '';
 
-  return DOMPurify.sanitize(html, {
+  if (!purifier) {
+    // Keep editor-specific exceptions isolated from the host application's DOMPurify hooks.
+    purifier = DOMPurify(window);
+    purifier.addHook('uponSanitizeAttribute', (node, attribute) => {
+      const tag = node.nodeName.toLowerCase();
+      if (tag === 'img' && attribute.attrName === 'src' && /^blob:/i.test(attribute.attrValue.trim())) {
+        attribute.forceKeepAttr = true;
+      }
+      if (
+        tag === 'svg' &&
+        (node as Element).hasAttribute('data-latex') &&
+        attribute.attrName === 'contenteditable' &&
+        attribute.attrValue === 'false'
+      ) {
+        attribute.forceKeepAttr = true;
+      }
+    });
+  }
+
+  return purifier.sanitize(html, {
     USE_PROFILES: { html: true, svg: true, svgFilters: true },
     ADD_TAGS,
     ADD_ATTR,
