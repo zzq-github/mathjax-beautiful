@@ -74,6 +74,7 @@
         <button
           class="toolbar-btn formula-btn"
           :title="tooltipTexts.formula"
+          @mousedown.prevent="saveSelection"
           @click="showFormulaEditor"
         >
           <span class="fx-icon">fx</span>
@@ -98,13 +99,15 @@
           :accept="props.allowedImageTypes.join(',')"
           style="display: none"
           @change="handleImageUpload"
+          @cancel="restoreSelection"
         >
         <button
           v-if="shouldShowTool('image')"
           class="toolbar-btn image-btn"
           :disabled="uploadLoading || props.readonly"
           :title="tooltipTexts.image"
-          @click="imageInput?.click()"
+          @mousedown.prevent="saveSelection"
+          @click="openImagePicker"
         >
           <span
             v-if="uploadLoading"
@@ -206,6 +209,7 @@
       :theme="internalTheme"
       v-bind="props.formulaEditorProps"
       @insert="insertFormula"
+      @close="restoreSelection"
     />
   </div>
 </template>
@@ -213,7 +217,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import VueMathjaxBeautiful from '../VueMathjaxBeautiful/index.vue';
-import { convertLatexToSvg, extractLatexFromSvg, initMathJax } from '../../utils/latex';
+import { convertLatexToSvg, extractLatexFromSvg, initMathJax, matchLatex } from '../../utils/latex';
 import { useI18n } from '../../composables/useI18n';
 import { escapeHtml, sanitizeHtml } from '../../utils/sanitizeHtml';
 
@@ -373,6 +377,47 @@ const activeFormats = ref(new Set<string>());
 const autoSaveTimer = ref<number | null>(null);
 const lastSavedContent = ref('');
 const objectUrls = new Set<string>();
+let savedRange: Range | null = null;
+
+const isEditorRange = (range: Range) => !!editorRef.value &&
+  editorRef.value.contains(range.startContainer) && editorRef.value.contains(range.endContainer);
+
+const saveSelection = () => {
+  const selection = window.getSelection();
+  if (selection?.rangeCount && isEditorRange(selection.getRangeAt(0))) {
+    savedRange = selection.getRangeAt(0).cloneRange();
+  }
+};
+
+const restoreRange = (targetRange: Range | null) => {
+  const editor = editorRef.value;
+  if (!editor || props.readonly) return;
+  const range = targetRange && isEditorRange(targetRange) ? targetRange.cloneRange() : document.createRange();
+  if (!targetRange || !isEditorRange(targetRange)) {
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  editor.focus({ preventScroll: true });
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+};
+
+const restoreSelection = () => restoreRange(savedRange);
+
+const openImagePicker = () => {
+  if (props.readonly || !props.enableImage) return;
+  saveSelection();
+  imageInput.value?.click();
+};
+
+const insertEditorHtml = (html: string, targetRange = savedRange) => {
+  restoreRange(targetRange);
+  if (!document.execCommand('insertHTML', false, html)) {
+    throw new Error('无法在编辑器中插入内容');
+  }
+  saveSelection();
+};
 
 // 组件内部主题状态（独立于外部传入的theme）
 const internalTheme = ref(props.theme || 'light');
@@ -730,6 +775,7 @@ const handleBeforeInput = (event: Event) => {
 // 更新选区状态
 const updateSelection = () => {
   if (!editorRef.value) return;
+  saveSelection();
 
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) {
@@ -750,7 +796,13 @@ const updateSelection = () => {
 
 // 插入公式
 const insertFormula = async (latex: string) => {
-  if (!editorRef.value) return;
+  if (!editorRef.value || props.readonly || !latex.trim()) return;
+  const trimmed = latex.trim();
+  const hasWrapper = matchLatex(trimmed).some(match => match.start === 0 && match.end === trimmed.length);
+  const formula = hasWrapper ? trimmed : `$$${trimmed}$$`;
+  const insertionRange = savedRange?.cloneRange() ?? null;
+  const editedElement = editingFormulaElement.value;
+  editingFormulaElement.value = null;
 
   try {
     // 确保MathJax已经初始化
@@ -764,19 +816,18 @@ const insertFormula = async (latex: string) => {
     }
 
     // 转换LaTeX为SVG
-    const svgHtml = sanitizeHtml(await convertLatexToSvg(`$$${latex}$$`));
-
-    // 确保编辑器获得焦点
-    editorRef.value.focus();
+    const svgHtml = sanitizeHtml(await convertLatexToSvg(formula));
+    if (!editorRef.value || props.readonly) return;
 
     // 如果是编辑已有公式，先删除原公式
-    if (editingFormulaElement.value) {
-      editingFormulaElement.value.remove();
-      editingFormulaElement.value = null;
+    let targetRange = insertionRange;
+    if (editedElement && editorRef.value.contains(editedElement)) {
+      targetRange = document.createRange();
+      targetRange.selectNode(editedElement);
     }
 
     // 插入SVG公式
-    document.execCommand('insertHTML', false, svgHtml);
+    insertEditorHtml(svgHtml, targetRange);
 
     // 更新内容
     handleInput();
@@ -792,8 +843,10 @@ const insertFormula = async (latex: string) => {
     console.error('插入公式失败:', error);
     // 如果SVG转换失败，作为备用方案插入LaTeX文本
     try {
-      editorRef.value.focus();
-      document.execCommand('insertText', false, `$$${latex}$$`);
+      if (!editorRef.value || props.readonly) return;
+      restoreRange(insertionRange);
+      document.execCommand('insertText', false, formula);
+      saveSelection();
       handleInput();
     } catch (fallbackError) {
       console.error('备用插入也失败:', fallbackError);
@@ -804,6 +857,7 @@ const insertFormula = async (latex: string) => {
 // 显示公式编辑器
 const showFormulaEditor = () => {
   if (!props.enableFormula || props.readonly) return;
+  saveSelection();
   
   showFormula.value = true;
   editingLatex.value = '';
@@ -814,6 +868,8 @@ const showFormulaEditor = () => {
 const editExistingFormula = (svgElement: HTMLElement) => {
   const latexCode = svgElement.getAttribute('data-latex');
   if (latexCode) {
+    savedRange = document.createRange();
+    savedRange.selectNode(svgElement);
     editingLatex.value = latexCode;
     editingFormulaElement.value = svgElement;
     showFormula.value = true;
@@ -827,6 +883,8 @@ const setupFormulaClickEvents = () => {
   const svgElements = editorRef.value.querySelectorAll('svg[data-latex]');
   svgElements.forEach((svg) => {
     const htmlElement = svg as HTMLElement;
+    // Chromium's insertHTML command can strip this attribute while inserting SVG.
+    htmlElement.setAttribute('contenteditable', 'false');
     htmlElement.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -871,8 +929,7 @@ const handleImageUpload = async (event: Event) => {
       `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(file.name)}" style="max-width: 100%; height: auto; margin: 8px 0; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />`
     );
 
-    editorRef.value.focus();
-    document.execCommand('insertHTML', false, imgHtml);
+    insertEditorHtml(imgHtml + ' ');
 
     emit('imageUploaded', imageUrl);
     handleInput();
@@ -1070,6 +1127,7 @@ const updateStats = () => {
 // 输入处理
 const handleInput = () => {
   if (!editorRef.value) return;
+  saveSelection();
 
   // 检查字符限制
   if (props.maxLength && editorRef.value.textContent && editorRef.value.textContent.length > props.maxLength) {
@@ -1206,6 +1264,7 @@ const handleFocus = () => {
 };
 
 const handleBlur = () => {
+  if (!showFormula.value) saveSelection();
   emit('blur');
 };
 
