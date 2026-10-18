@@ -6,15 +6,18 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import { assertNewStableVersion } from './release-version.mjs';
+import { releaseTargetForPackage } from './release-target.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const metadata = JSON.parse(readFileSync(join(root, 'dist/release/package.json'), 'utf8'));
-const manifest = JSON.parse(readFileSync(join(root, 'packages/core/package.json'), 'utf8'));
-assert.equal(metadata.name, 'vue-mathjax-beautiful');
+const target = releaseTargetForPackage(process.env.RELEASE_PACKAGE);
+const metadata = JSON.parse(readFileSync(join(root, target.artifactDir, 'package.json'), 'utf8'));
+const manifest = JSON.parse(readFileSync(join(root, target.directory, 'package.json'), 'utf8'));
+assert.equal(metadata.name, target.name);
+assert.equal(manifest.name, target.name);
 assert.equal(metadata.version, manifest.version);
-assert.equal(process.env.RELEASE_TAG, `v${metadata.version}`);
+assert.equal(process.env.RELEASE_TAG, `${target.tagPrefix}${metadata.version}`);
 assert.equal(metadata.filename, `${metadata.name}-${metadata.version}.tgz`);
-const tarball = join(root, 'dist/release', metadata.filename);
+const tarball = join(root, target.artifactDir, metadata.filename);
 const integrity = `sha512-${createHash('sha512').update(readFileSync(tarball)).digest('base64')}`;
 assert.equal(integrity, metadata.integrity, 'Verified tarball was modified');
 

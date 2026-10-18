@@ -8,4 +8,5 @@ pnpm exec vitest run
 pnpm type-check
 pnpm build:all
 pnpm test:package
-echo 'Validation passed. Commit the reviewed version and changelog, then push its matching vX.Y.Z tag to publish.'
+pnpm test:package:react
+echo 'Validation passed. Commit the reviewed version and changelog, then push vX.Y.Z for Vue or react-vX.Y.Z for React.'

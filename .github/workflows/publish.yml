@@ -2,7 +2,7 @@ name: Publish to NPM
 
 on:
   push:
-    tags: ['v[0-9]*']
+    tags: ['v[0-9]*', 'react-v[0-9]*']
   pull_request:
     paths:
       - '.github/workflows/publish.yml'
@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag matching packages/core/package.json (e.g. v1.4.2)'
+        description: 'Existing release tag: vX.Y.Z (Vue) or react-vX.Y.Z (React)'
         required: true
         type: string
 
@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: npm-vue-${{ github.event.pull_request.number || 'release' }}
+  group: npm-packages-${{ github.event.pull_request.number || 'release' }}
   cancel-in-progress: false
 
 jobs:
@@ -30,6 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       source-sha: ${{ steps.source.outputs.sha }}
+      package: ${{ steps.target.outputs.package }}
+      package-name: ${{ steps.target.outputs.package-name }}
+      artifact-dir: ${{ steps.target.outputs.artifact-dir }}
+      artifact-file: ${{ steps.target.outputs.artifact-file }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +41,22 @@ jobs:
           fetch-depth: 0
       - id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Select and validate release package
+        id: target
+        env:
+          RELEASE_TAG: ${{ inputs.tag || (github.event_name == 'push' && github.ref_name) || '' }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { appendFileSync, readFileSync } from 'node:fs';
+          import { releaseTargetForTag } from './scripts/release-target.mjs';
+          const fallback = `v${JSON.parse(readFileSync('packages/core/package.json')).version}`;
+          const target = releaseTargetForTag(process.env.RELEASE_TAG || fallback);
+          const manifest = JSON.parse(readFileSync(`${target.directory}/package.json`));
+          assert.equal(manifest.name, target.name);
+          assert.equal(manifest.version, target.version, 'Tag must match the selected package version');
+          appendFileSync(process.env.GITHUB_OUTPUT, `package=${target.key}\npackage-name=${target.name}\nartifact-dir=${target.artifactDir}\nartifact-file=${target.name}-${target.version}.tgz\n`);
+          JS
       - uses: pnpm/action-setup@v4
         with:
           version: 9.15.9
@@ -49,7 +69,6 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           test "$GITHUB_REF" = "refs/tags/$RELEASE_TAG"
-          node --input-type=module -e 'import { readFileSync } from "node:fs"; const {version} = JSON.parse(readFileSync("packages/core/package.json")); if (!/^\d+\.\d+\.\d+$/.test(version) || process.env.RELEASE_TAG !== `v${version}`) throw new Error("Tag must match the stable Vue package version");'
           test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git merge-base --is-ancestor HEAD origin/master
@@ -60,10 +79,14 @@ jobs:
       - run: pnpm build:all
       - name: Pack and install in an isolated consumer
         run: pnpm test:package
+      - name: Verify isolated React 18 and React 19 consumers
+        run: pnpm test:package:react
       - uses: actions/upload-artifact@v4
         with:
           name: npm-package
-          path: dist/release/*
+          path: |
+            ${{ steps.target.outputs.artifact-dir }}/${{ steps.target.outputs.artifact-file }}
+            ${{ steps.target.outputs.artifact-dir }}/package.json
           if-no-files-found: error
 
   publish:
@@ -75,6 +98,7 @@ jobs:
       id-token: write
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      RELEASE_PACKAGE: ${{ needs.verify.outputs.package }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,17 +112,22 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: npm-package
-          path: dist/release
+          path: ${{ needs.verify.outputs.artifact-dir }}
       - name: Publish the verified tarball
         run: node scripts/publish-package.mjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Verify registry version, integrity and latest tag
         run: node scripts/verify-registry.mjs
+      - name: Install the published React package from npm
+        if: env.RELEASE_PACKAGE == 'react'
+        run: node scripts/verify-react-package.mjs --published
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          PACKAGE_NAME: ${{ needs.verify.outputs.package-name }}
+          PACKAGE_ARTIFACT: ${{ needs.verify.outputs.artifact-dir }}/${{ needs.verify.outputs.artifact-file }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" dist/release/*.tgz --verify-tag --title "vue-mathjax-beautiful $RELEASE_TAG" --generate-notes
+            gh release create "$RELEASE_TAG" "$PACKAGE_ARTIFACT" --verify-tag --title "$PACKAGE_NAME $RELEASE_TAG" --generate-notes
           fi

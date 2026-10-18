@@ -3,9 +3,13 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
+import process from 'node:process';
+import { releaseTargetForPackage } from './release-target.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const expected = JSON.parse(readFileSync(resolve(root, 'dist/release/package.json'), 'utf8'));
+const target = releaseTargetForPackage(process.env.RELEASE_PACKAGE);
+const expected = JSON.parse(readFileSync(resolve(root, target.artifactDir, 'package.json'), 'utf8'));
+assert.equal(expected.name, target.name);
 for (let attempt = 0; ; attempt++) {
   try {
     const response = await fetch(`https://registry.npmjs.org/${expected.name}`, { cache: 'no-store' });

@@ -18,6 +18,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:package": "node scripts/verify-package.mjs",
+    "test:package:react": "node scripts/verify-react-package.mjs",
     "lint": "eslint . --fix",
     "format": "prettier --write packages/*/src/**/*.{vue,ts,tsx,js,css} examples/*/src/**/*.{vue,ts,tsx,js,css}",
     "prepare": "husky install",
