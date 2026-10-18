@@ -18,7 +18,8 @@ for (let attempt = 0; ; attempt++) {
     console.log(`Registry verified: ${expected.name}@${expected.version} (matching integrity and latest tag)`);
     break;
   } catch (error) {
-    if (attempt >= 5) throw error;
-    await setTimeout(5000);
+    if (attempt >= 19) throw error;
+    console.log(`Registry not ready (${attempt + 1}/20); retrying in 15 seconds: ${error.message}`);
+    await setTimeout(15000);
   }
 }

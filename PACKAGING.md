@@ -39,7 +39,7 @@ pnpm test:package
    ```
 
 3. `.github/workflows/publish.yml` 重新执行验证，将验证后的 tarball 作为 artifact 传递给发布任务，直接发布该 tarball，不在发布任务重新构建。
-4. 工作流核对 npm 版本、`latest` 和 tarball integrity 后创建 GitHub Release。只有这些步骤成功才算发布完成。
+4. npm 接收发布后可能仍需几分钟处理。工作流最多等待约 5 分钟，核对 npm 版本、`latest` 和 tarball integrity 后创建 GitHub Release。只有这些步骤成功才算发布完成。
 
 工作流要求 tag 精确匹配 Vue 包版本，且 tag 提交必须已在 `master` 中。发布串行执行，新版本必须高于当前稳定版 `latest`，防止旧版本覆盖最新版本。手动重跑时，工作流运行引用和输入都必须使用同一 tag，保证 provenance 对应实际构建的提交：
 
