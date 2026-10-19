@@ -1,5 +1,13 @@
 # react-mathjax-beautiful
 
+## 1.0.4
+
+### Patch Changes
+
+- Restore the previous focus and text selection when the formula dialog is cancelled, submitted, closed externally, or unmounted (#12).
+- Preserve contenteditable caret ranges and keyboard trigger focus, respect focus explicitly chosen by the caller, and avoid restoring focus to removed elements or from inline editors.
+- Add regression coverage for dialog close paths, controlled state, StrictMode cleanup, selection restoration and immediate continued typing in the demo.
+
 ## 1.0.3
 
 ### Patch Changes
