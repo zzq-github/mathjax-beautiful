@@ -65,6 +65,7 @@ export default function ReactFormulaPlayground({ isDark = false }: ReactFormulaP
         <button
           type="button"
           className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => setOpen(true)}
         >
           Edit in React dialog

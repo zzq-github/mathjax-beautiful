@@ -1,75 +1,32 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router';
+import { routePages } from './pages';
 
 // 获取base路径，用于GitHub Pages部署
-const base = import.meta.env.VITE_BASE_URL || '/'
+const base = import.meta.env.VITE_BASE_URL || '/';
 
 const router = createRouter({
   history: createWebHistory(base),
-  routes: [
-    {
-      path: '/',
-      name: 'Home',
-      component: () => import('../views/Home.vue'),
-      meta: { title: 'MathJax Beautiful' }
-    },
-    {
-      path: '/demo',
-      name: 'Demo',
-      component: () => import('../views/Demo.vue'),
-      meta: { title: 'Demo - MathJax Beautiful' }
-    },
-    {
-      path: '/config',
-      name: 'Config',
-      component: () => import('../views/Config.vue'),
-      meta: { title: 'Configuration - MathJax Beautiful' }
-    },
-    {
-      path: '/editor-config',
-      name: 'EditorConfig',
-      component: () => import('../views/EditorConfig.vue'),
-      meta: { title: 'Editor Configuration - MathJax Beautiful' }
-    },
-    {
-      path: '/docs',
-      name: 'Docs',
-      component: () => import('../views/Docs.vue'),
-      meta: { title: 'Documentation - MathJax Beautiful' }
-    },
-    {
-      path: '/updates',
-      name: 'Updates',
-      component: () => import('../views/Updates.vue'),
-      meta: { title: 'Updates - MathJax Beautiful' }
-    },
-    {
-      path: '/privacy',
-      name: 'Privacy',
-      component: () => import('../views/Privacy.vue'),
-      meta: { title: 'Privacy Policy - MathJax Beautiful' }
-    },
-    {
-      path: '/terms',
-      name: 'Terms',
-      component: () => import('../views/Terms.vue'),
-      meta: { title: 'Terms of Service - MathJax Beautiful' }
-    }
-  ],
+  routes: routePages.map(({ path, name, title }) => ({
+    path,
+    name,
+    component: () => import(`../views/${name}.vue`),
+    meta: { title },
+  })),
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) {
-      return savedPosition
+      return savedPosition;
     } else {
-      return { top: 0 }
+      return { top: 0 };
     }
-  }
-})
+  },
+});
 
 // 路由守卫：更新页面标题
 router.beforeEach((to, from, next) => {
   if (to.meta?.title) {
-    document.title = to.meta.title as string
+    document.title = to.meta.title as string;
   }
-  next()
-})
+  next();
+});
 
-export default router
+export default router;
