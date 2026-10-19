@@ -161,6 +161,7 @@ export function MathjaxBeautiful({
   onLocaleChange,
 }: MathjaxBeautifulProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const focusSessionRef = useRef(0);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const [internalValue, setInternalValue] = useState(defaultValue ?? existingLatex ?? '');
   const [activeCategory, setActiveCategory] = useState(defaultCategory);
@@ -224,6 +225,56 @@ export function MathjaxBeautiful({
       }
     }
   }, [currentOpen, defaultValue, existingLatex, inline, value]);
+
+  useEffect(() => {
+    if (!currentOpen || inline || typeof document === 'undefined') return;
+    const previous = document.activeElement;
+    if (!(previous instanceof HTMLElement) || previous === document.body) return;
+    const session = ++focusSessionRef.current;
+    const overlay = textareaRef.current?.closest('.rmb-overlay');
+    const textSelection =
+      previous instanceof HTMLInputElement || previous instanceof HTMLTextAreaElement
+        ? {
+            start: previous.selectionStart,
+            end: previous.selectionEnd,
+            direction: previous.selectionDirection,
+          }
+        : null;
+    const selection = window.getSelection();
+    const range =
+      selection?.rangeCount && previous.contains(selection.getRangeAt(0).commonAncestorContainer)
+        ? selection.getRangeAt(0).cloneRange()
+        : null;
+
+    return () => {
+      // Wait for the portal to unmount and let the caller choose its own next focus.
+      queueMicrotask(() => {
+        if (session !== focusSessionRef.current || !previous.isConnected) return;
+        const active = document.activeElement;
+        if (active && active !== document.body && !overlay?.contains(active)) return;
+        previous.focus({ preventScroll: true });
+        if (
+          textSelection?.start != null &&
+          textSelection.end != null &&
+          (previous instanceof HTMLInputElement || previous instanceof HTMLTextAreaElement)
+        ) {
+          previous.setSelectionRange(
+            textSelection.start,
+            textSelection.end,
+            textSelection.direction ?? undefined
+          );
+        } else if (
+          range &&
+          previous.contains(range.startContainer) &&
+          previous.contains(range.endContainer)
+        ) {
+          const currentSelection = window.getSelection();
+          currentSelection?.removeAllRanges();
+          currentSelection?.addRange(range);
+        }
+      });
+    };
+  }, [currentOpen, inline]);
 
   useEffect(() => {
     if (!currentOpen || !autoFocus || readonly) return;

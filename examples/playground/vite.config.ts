@@ -2,12 +2,32 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
+import { routePages } from './src/router/pages';
 
 export default defineConfig({
   // GitHub Pages部署配置
   base: process.env.VITE_BASE_URL || '/',
 
-  plugins: [vue(), react()],
+  plugins: [
+    vue(),
+    react(),
+    {
+      name: 'static-page-routes',
+      enforce: 'post',
+      generateBundle(_options, bundle) {
+        const index = bundle['index.html'];
+        if (!index || index.type !== 'asset') throw new Error('Missing demo index.html');
+        for (const { path } of routePages) {
+          if (path === '/') continue;
+          this.emitFile({
+            type: 'asset',
+            fileName: `${path.slice(1)}/index.html`,
+            source: index.source,
+          });
+        }
+      },
+    },
+  ],
 
   resolve: {
     // 使用数组形式，保证更具体的规则先匹配（样式入口必须排在包名规则之前）
