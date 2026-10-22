@@ -1007,7 +1007,15 @@ vue-mathjax-beautiful/
 
 本项目基于 [MIT 许可证](LICENSE) 开源。
 
-## 🙏 致谢
+## 🙏 贡献者与致谢
+
+感谢为项目贡献代码、反馈问题、完善修复方案和验证结果的每一位参与者。
+
+- [@David-TechNomad](https://github.com/David-TechNomad)：通过 [PR #10](https://github.com/zzq-github/mathjax-beautiful/pull/10) 贡献符号按钮宽度、高度和间距的自定义能力，改善组件在不同布局中的适配体验。
+- [@shtns](https://github.com/shtns)：反馈本地图片无法显示和插入公式后无法继续编辑的问题，帮助发现并跟进 [Issue #7](https://github.com/zzq-github/mathjax-beautiful/issues/7) 与 [Issue #8](https://github.com/zzq-github/mathjax-beautiful/issues/8)。
+- **ChatGPT / Codex 辅助**：协助定位 Issue #7、#8 的图片地址清洗、公式插入和光标恢复问题，梳理修复方案，并辅助完成回归测试与真实浏览器验证；相关修复见 [PR #11](https://github.com/zzq-github/mathjax-beautiful/pull/11)。
+
+### 开源依赖
 
 - [MathJax](https://www.mathjax.org/) - 强大的数学公式渲染引擎
 - [Vue.js](https://vuejs.org/) - 渐进式 JavaScript 框架
